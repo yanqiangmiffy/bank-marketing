@@ -2,7 +2,7 @@
 # -*- coding:utf-8 _*-  
 """ 
 @Author:yanqiang 
-@File: competition_zoo.py
+@File: baseline.py
 @Time: 2018/11/6 10:48
 @Software: PyCharm 
 @Description:
@@ -22,11 +22,7 @@ from lightgbm import LGBMClassifier
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import cross_val_score
 from sklearn.preprocessing import LabelEncoder
-
-
-class Baseline(object):
-    def __init__(self):
-        pass
+from sklearn.preprocessing import StandardScaler,MinMaxScaler
 
 
 def get_models():
@@ -47,8 +43,8 @@ def get_models():
     lgb = LGBMClassifier()
     models = {
         'naive bayes': nb,
-        # 'svm': svc,
-        # 'linear_svm': ln_svc,
+        'svm': svc,
+        'linear_svm': ln_svc,
         'knn': knn,
         'logistic': lr,
         'mlp-nn': nn,
@@ -84,10 +80,10 @@ for col in cate_cols:
 train = pd.get_dummies(train, columns=cate_cols)
 test = pd.get_dummies(test, columns=cate_cols)
 # 数据预处理 数值型数据
-# num_cols=['age','balance','duration','campaign','pdays','previous']
-# scaler=MinMaxScaler()
-# train[num_cols] = scaler.fit_transform(train[num_cols].values)
-# test[num_cols] = scaler.transform(test[num_cols].values)
+num_cols=['age','balance','duration','campaign','pdays','previous']
+scaler=MinMaxScaler()
+train[num_cols] = scaler.fit_transform(train[num_cols].values)
+test[num_cols] = scaler.transform(test[num_cols].values)
 print(train.shape)
 print(test.shape)
 cols = [col for col in train.columns if col not in ['id', 'y']]

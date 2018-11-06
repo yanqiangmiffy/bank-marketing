@@ -16,32 +16,67 @@ from sklearn.model_selection import KFold
 from sklearn.metrics import roc_auc_score
 from sklearn.svm import LinearSVC
 from xgboost import XGBClassifier
-from sklearn.preprocessing import StandardScaler,MinMaxScaler
+from lightgbm import LGBMClassifier
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import PolynomialFeatures
 import lightgbm as lgb
 pd.set_option('display.max_columns',100)
-
-train=pd.read_csv('input/train.csv')
-test=pd.read_csv('input/test.csv')
-
-# 数据预处理 类别编码
-cate_cols=['job','marital','education','default','housing','loan','contact','day','month','poutcome']
-for col in cate_cols:
-    lb_encoder=LabelEncoder()
-    train[col]=lb_encoder.fit_transform(train.job)
-    test[col]=lb_encoder.transform(test.job) # 这个步骤风险有点大，因为test的类别标签不一定都出现在train里面，这里比较幸运
-
-train=pd.get_dummies(train,columns=cate_cols)
-test=pd.get_dummies(test,columns=cate_cols)
-# 数据预处理 数值型数据
-# num_cols=['age','balance','duration','campaign','pdays','previous']
-# scaler=MinMaxScaler()
-# train[num_cols] = scaler.fit_transform(train[num_cols].values)
-# test[num_cols] = scaler.transform(test[num_cols].values)
-print(train.shape)
-print(test.shape)
+df_train=pd.read_csv('input/train.csv')
+df_test=pd.read_csv('input/test.csv')
 
 
-# cv5
+def add_poly_features(data,column_names):
+    # 组合特征
+    features=data[column_names]
+    rest_features=data.drop(column_names,axis=1)
+    poly_transformer=PolynomialFeatures(degree=2,interaction_only=False,include_bias=False)
+    poly_features=pd.DataFrame(poly_transformer.fit_transform(features),columns=poly_transformer.get_feature_names(column_names))
+
+    for col in poly_features.columns:
+        rest_features.insert(1,col,poly_features[col])
+    return rest_features
+
+
+def process_label(train,test,cate_cols):
+    # 数据预处理 类别编码
+    cate_cols=['job','marital','education','default','housing','loan','contact','day','month','poutcome']
+    for col in cate_cols:
+        lb_encoder=LabelEncoder()
+        train[col]=lb_encoder.fit_transform(train[col])
+        test[col]=lb_encoder.transform(test[col]) # 这个步骤风险有点大，因为test的类别标签不一定都出现在train里面，这里比较幸运
+
+    train = add_poly_features(train, cate_cols)
+    test = add_poly_features(test, cate_cols)
+
+    train = pd.get_dummies(train, columns=cate_cols)
+    test = pd.get_dummies(test, columns=cate_cols)
+    return train,test
+
+
+def process_nums(train,test,num_cols):
+    # 数据预处理 数值型数据
+    num_cols=['age','balance','duration','campaign','pdays','previous']
+    scaler=MinMaxScaler()
+    train[num_cols] = scaler.fit_transform(train[num_cols].values)
+    test[num_cols] = scaler.transform(test[num_cols].values)
+
+    return train,test
+
+
+def create_feature(train,test):
+    # 数据预处理 类别编码
+    cate_cols = ['job', 'marital', 'education', 'default', 'housing', 'loan', 'contact', 'day', 'month', 'poutcome']
+    train, test=process_label(train,test,cate_cols)
+    # 数据预处理 数值型数据
+    num_cols = ['age', 'balance', 'duration', 'campaign', 'pdays', 'previous']
+    train, test=process_nums(train,test,num_cols)
+
+    print(train.shape)
+    print(test.shape)
+    return train,test
+
+
+# cv5 交叉验证
 def evaluate_cv5_lgb(train_df, test_df, cols, test=False):
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
     y_test = 0
@@ -84,12 +119,13 @@ def evaluate_cv5_lgb(train_df, test_df, cols, test=False):
     auc = roc_auc_score(train_df.y.values, oof_train)
     y_test /= 5
     print('5 Fold auc:', auc)
-    return auc, oof_train, y_test
+    return  y_test
 
 
+train,test=create_feature(df_train,df_test)
+print(list(train.columns))
 cols = [col for col in train.columns if col not in ['id','y']]
-auc, oof_train, y_test=evaluate_cv5_lgb(train,test,cols,True)
-
+y_test=evaluate_cv5_lgb(train,test,cols,True)
 
 test['y']=y_test
 test[['id','y']].to_csv('result/01_lgb_cv5.csv',columns=None, header=False, index=False)
