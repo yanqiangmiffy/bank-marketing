@@ -77,7 +77,7 @@ def create_feature(train,test):
 
 
 # cv5 交叉验证
-def evaluate_cv5_lgb(train_df, test_df, cols, test=False):
+def evaluate_cv5_lgb1(train_df, test_df, cols, test=False):
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
     y_test = 0
     oof_train = np.zeros((train_df.shape[0],))
@@ -114,18 +114,43 @@ def evaluate_cv5_lgb(train_df, test_df, cols, test=False):
                         )
         y_pred = gbm.predict(X_val)
         if test:
-            y_test = gbm.predict(test_df.loc[:, cols])
+            y_test+= gbm.predict(test_df.loc[:, cols])
         oof_train[val_index] = y_pred
     auc = roc_auc_score(train_df.y.values, oof_train)
+    y_test/= 5
+    print('5-Fold auc:', auc)
+    return y_test
+
+
+def evaluate_cv5_lgb(train_df, test_df, cols, test=False):
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    y_test = 0
+    oof_train = np.zeros((train_df.shape[0],))
+    for i, (train_index, val_index) in enumerate(kf.split(train_df[cols])):
+        X_train, y_train = train_df.loc[train_index, cols], train_df.y.values[train_index]
+        X_val, y_val = train_df.loc[val_index, cols], train_df.y.values[val_index]
+
+        xgb = XGBClassifier()
+
+        xgb.fit(X_train, y_train,
+                  eval_set=[(X_train, y_train), (X_val, y_val)],
+                  early_stopping_rounds=50, eval_metric=['auc'], verbose=2)
+        y_pred = xgb.predict(X_val)
+        if test:
+            y_test += xgb.predict(test_df.loc[:, cols])
+        oof_train[val_index] = y_pred
+    auc = roc_auc_score(train_df.y.values, oof_train)
+    print(y_test)
     y_test /= 5
+    print(y_test)
     print('5 Fold auc:', auc)
-    return  y_test
+    return y_test
 
 
 train,test=create_feature(df_train,df_test)
 print(list(train.columns))
 cols = [col for col in train.columns if col not in ['id','y']]
-y_test=evaluate_cv5_lgb(train,test,cols,True)
+y_test=evaluate_cv5_lgb1(train,test,cols,True)
 
 test['y']=y_test
 test[['id','y']].to_csv('result/01_lgb_cv5.csv',columns=None, header=False, index=False)
