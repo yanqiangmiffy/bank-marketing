@@ -19,6 +19,7 @@ from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import PolynomialFeatures
+from sklearn.model_selection import GridSearchCV
 import lightgbm as lgb
 pd.set_option('display.max_columns',100)
 df_train=pd.read_csv('input/train.csv')
@@ -75,6 +76,12 @@ def create_feature(train,test):
     print(test.shape)
     return train,test
 
+# 调整参数
+def tune_params(model,params,X,y):
+    gsearch = GridSearchCV(estimator=model,param_grid=params, scoring='roc_auc')
+    gsearch.fit(X, y)
+    print(gsearch.cv_results_, gsearch.best_params_, gsearch.best_score_)
+    return gsearch
 
 # cv5 交叉验证
 def evaluate_cv5_lgb1(train_df, test_df, cols, test=False):
@@ -114,6 +121,8 @@ def evaluate_cv5_lgb1(train_df, test_df, cols, test=False):
                         )
         y_pred = gbm.predict(X_val)
         if test:
+            result=gbm.predict(test_df.loc[:, cols])
+            print(type(result),result.shape)
             y_test+= gbm.predict(test_df.loc[:, cols])
         oof_train[val_index] = y_pred
     auc = roc_auc_score(train_df.y.values, oof_train)
@@ -124,6 +133,15 @@ def evaluate_cv5_lgb1(train_df, test_df, cols, test=False):
 
 def evaluate_cv5_lgb(train_df, test_df, cols, test=False):
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    xgb = XGBClassifier()
+    params = {"learning_rate": [0.08, 0.1, 0.12],
+              "max_depth": [6, 7],
+              "subsample": [0.95, 0.98],
+              "colsample_bytree": [0.6, 0.7],
+              "min_child_weight": [3, 3.5, 3.8]
+              }
+    xgb = tune_params(xgb,params,train_df[cols],train_df.y.values)
+
     y_test = 0
     oof_train = np.zeros((train_df.shape[0],))
     for i, (train_index, val_index) in enumerate(kf.split(train_df[cols])):
@@ -132,12 +150,13 @@ def evaluate_cv5_lgb(train_df, test_df, cols, test=False):
 
         xgb = XGBClassifier()
 
+
         xgb.fit(X_train, y_train,
                   eval_set=[(X_train, y_train), (X_val, y_val)],
                   early_stopping_rounds=50, eval_metric=['auc'], verbose=2)
-        y_pred = xgb.predict(X_val)
+        y_pred = xgb.predict_proba(X_val)[:,1]
         if test:
-            y_test += xgb.predict(test_df.loc[:, cols])
+            y_test += xgb.predict_proba(test_df.loc[:, cols])[:,1]
         oof_train[val_index] = y_pred
     auc = roc_auc_score(train_df.y.values, oof_train)
     print(y_test)
@@ -151,6 +170,7 @@ train,test=create_feature(df_train,df_test)
 print(list(train.columns))
 cols = [col for col in train.columns if col not in ['id','y']]
 y_test=evaluate_cv5_lgb1(train,test,cols,True)
+y_test=evaluate_cv5_lgb(train,test,cols,True)
 
 test['y']=y_test
 test[['id','y']].to_csv('result/01_lgb_cv5.csv',columns=None, header=False, index=False)
