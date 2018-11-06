@@ -83,6 +83,19 @@ def tune_params(model,params,X,y):
     print(gsearch.cv_results_, gsearch.best_params_, gsearch.best_score_)
     return gsearch
 
+
+# 特征重要性
+def plot_fea_importance(classifier,X_train):
+    fig=plt.figure(figsize=(10,12))
+    name = "xgb"
+    indices = np.argsort(classifier.feature_importances_)[::-1][:40]
+    g = sns.barplot(y=X_train.columns[indices][:40],
+                    x=classifier.feature_importances_[indices][:40],orient='h')
+    g.set_xlabel("Relative importance", fontsize=12)
+    g.set_ylabel("Features", fontsize=12)
+    g.tick_params(labelsize=9)
+    g.set_title(name + " feature importance")
+    plt.show()
 # cv5 交叉验证
 def evaluate_cv5_lgb1(train_df, test_df, cols, test=False):
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
@@ -133,24 +146,21 @@ def evaluate_cv5_lgb1(train_df, test_df, cols, test=False):
 
 def evaluate_cv5_lgb(train_df, test_df, cols, test=False):
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
-    xgb = XGBClassifier()
-    params = {"learning_rate": [0.08, 0.1, 0.12],
-              "max_depth": [6, 7],
-              "subsample": [0.95, 0.98],
-              "colsample_bytree": [0.6, 0.7],
-              "min_child_weight": [3, 3.5, 3.8]
-              }
-    xgb = tune_params(xgb,params,train_df[cols],train_df.y.values)
+    # xgb = XGBClassifier()
+    # params = {"learning_rate": [0.08, 0.1, 0.12],
+    #           "max_depth": [6, 7],
+    #           "subsample": [0.95, 0.98],
+    #           "colsample_bytree": [0.6, 0.7],
+    #           "min_child_weight": [3, 3.5, 3.8]
+    #           }
+    # xgb = tune_params(xgb,params,train_df[cols],train_df.y.values)
 
     y_test = 0
     oof_train = np.zeros((train_df.shape[0],))
     for i, (train_index, val_index) in enumerate(kf.split(train_df[cols])):
         X_train, y_train = train_df.loc[train_index, cols], train_df.y.values[train_index]
         X_val, y_val = train_df.loc[val_index, cols], train_df.y.values[val_index]
-
         xgb = XGBClassifier()
-
-
         xgb.fit(X_train, y_train,
                   eval_set=[(X_train, y_train), (X_val, y_val)],
                   early_stopping_rounds=50, eval_metric=['auc'], verbose=2)
@@ -158,6 +168,8 @@ def evaluate_cv5_lgb(train_df, test_df, cols, test=False):
         if test:
             y_test += xgb.predict_proba(test_df.loc[:, cols])[:,1]
         oof_train[val_index] = y_pred
+        if i==0:
+            plot_fea_importance(xgb,X_train)
     auc = roc_auc_score(train_df.y.values, oof_train)
     print(y_test)
     y_test /= 5
@@ -167,9 +179,9 @@ def evaluate_cv5_lgb(train_df, test_df, cols, test=False):
 
 
 train,test=create_feature(df_train,df_test)
-print(list(train.columns))
+# print(list(train.columns))
 cols = [col for col in train.columns if col not in ['id','y']]
-y_test=evaluate_cv5_lgb1(train,test,cols,True)
+# y_test=evaluate_cv5_lgb1(train,test,cols,True)
 y_test=evaluate_cv5_lgb(train,test,cols,True)
 
 test['y']=y_test
