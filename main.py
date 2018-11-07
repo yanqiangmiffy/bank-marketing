@@ -103,7 +103,7 @@ def create_feature(df):
     # 添加些交叉特征
     # poly_cols=['log_balance','log_duration','log_campaign','log_pdays','datetime_int','age','previous']
     # new_df=add_poly_features(new_df,poly_cols)
-    
+
     new_train,new_test=new_df[:train_len],new_df[train_len:]
     print(list(new_train.columns))
     print(new_train.shape)
