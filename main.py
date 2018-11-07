@@ -47,6 +47,7 @@ def process_label(df,cate_cols):
     # for col in cate_cols:
     #     lb_encoder=LabelEncoder()
     #     df[col]=lb_encoder.fit_transform(df[col])
+    # df = add_poly_features(df, cate_cols)
     df = pd.get_dummies(df, columns=cate_cols)
     return df
 
@@ -99,6 +100,10 @@ def create_feature(df):
     num_cols = ['age', 'balance', 'duration', 'campaign', 'pdays', 'previous']
     new_df=process_nums(new_df,num_cols)
 
+    # 添加些交叉特征
+    # poly_cols=['log_balance','log_duration','log_campaign','log_pdays','datetime_int','age','previous']
+    # new_df=add_poly_features(new_df,poly_cols)
+    
     new_train,new_test=new_df[:train_len],new_df[train_len:]
     print(list(new_train.columns))
     print(new_train.shape)
