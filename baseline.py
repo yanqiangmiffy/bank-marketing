@@ -43,11 +43,11 @@ def get_models():
     lgb = LGBMClassifier()
     models = {
         'naive bayes': nb,
-        'svm': svc,
-        'linear_svm': ln_svc,
+        # 'svm': svc,
+        # 'linear_svm': ln_svc,
         'knn': knn,
         'logistic': lr,
-        'mlp-nn': nn,
+        # 'mlp-nn': nn,
         'ada boost':ab,
         'random forest': rf,
         'gradient boost': gb,

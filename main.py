@@ -43,22 +43,19 @@ def add_poly_features(data,column_names):
 
 def process_label(df,cate_cols):
     # 数据预处理 类别编码
-    cate_cols=['job','marital','education','default','housing','loan','contact','day','month','poutcome']
-    for col in cate_cols:
-        lb_encoder=LabelEncoder()
-        df[col]=lb_encoder.fit_transform(df[col])
-
-    df = add_poly_features(df, cate_cols)
+    cate_cols=['job','marital','education','default','housing','loan','contact','poutcome']
+    # for col in cate_cols:
+    #     lb_encoder=LabelEncoder()
+    #     df[col]=lb_encoder.fit_transform(df[col])
     df = pd.get_dummies(df, columns=cate_cols)
-
     return df
 
 
 def process_nums(df,num_cols):
     # 数据预处理 数值型数据
-    num_cols=['age','balance','duration','campaign','pdays','previous']
-    scaler=MinMaxScaler()
-    df[num_cols] = scaler.fit_transform(df[num_cols].values)
+    # num_cols=['age','balance','duration','campaign','pdays','previous']
+    # scaler=MinMaxScaler()
+    # df[num_cols] = scaler.fit_transform(df[num_cols].values)
 
     # 定义函数
     def standardize_nan(x):
@@ -67,29 +64,45 @@ def process_nums(df,num_cols):
         x_std = np.nanstd(x)
         return (x - x_mean) / x_std
 
-    df['age_log'] = np.log(df.age)
-    df['age_log_std'] = standardize_nan(df['age_log'])
+    df["log_balance"] = np.log(df.balance - df.balance.min() + 1)
+    df["log_duration"] = np.log(df.duration + 1)
+    df["log_campaign"] = np.log(df.campaign + 1)
+    df["log_pdays"] = np.log(df.pdays - df.pdays.min() + 1)
+    df = df.drop(["balance", "duration", "campaign", "pdays"], axis=1)
 
-    df['balance_p_nan'] = df['balance'].where(df.balance > 0, np.nan)
-    df['balance_m_nan'] = df['balance'].where(df.balance < 0, np.nan)
-    df['balance_p_log_nan'] = np.log(df['balance_p_nan'])
-    df['balance_m_log_nan'] = np.log(-df['balance_m_nan'])
-    df['balance_p_log_std_nan'] = standardize_nan(df['balance_p_log_nan'])
-    df['balance_m_log_std_nan'] = standardize_nan(df['balance_m_log_nan'])
-    df['balance_sign'] = np.sign(df['balance'])
+    # month 文字列与数値的変換
+    month_dict = {"jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+                  "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12}
+    df["month_int"] = df["month"].map(month_dict)
+    # month 与day 对 datetime 的変換
+    data_datetime = df \
+        .assign(ymd_str=lambda x: "2014" + "-" + x["month_int"].astype(str) + "-" + x["day"].astype(str)) \
+        .assign(datetime=lambda x: pd.to_datetime(x["ymd_str"])) \
+        ["datetime"].values
+    # datetime  int 变换
+    index = pd.DatetimeIndex(data_datetime)
+    df["datetime_int"] = np.log(index.astype(np.int64))
+
+    # 删除不要的列
+    df = df.drop(["month", "day", "month_int"], axis=1)
+    del data_datetime
+    del index
     return df
 
 
 def create_feature(df):
     # 数据预处理 类别编码
     cate_cols = ['job', 'marital', 'education', 'default', 'housing', 'loan', 'contact', 'day', 'month', 'poutcome']
-    df=process_label(df,cate_cols)
+    new_df=process_label(df,cate_cols)
+
     # 数据预处理 数值型数据
     num_cols = ['age', 'balance', 'duration', 'campaign', 'pdays', 'previous']
-    df=process_nums(df,num_cols)
+    new_df=process_nums(new_df,num_cols)
 
-    train,test=df[:train_len],df[train_len:]
-    return train,test
+    new_train,new_test=new_df[:train_len],new_df[train_len:]
+    print(list(new_train.columns))
+    print(new_train.shape)
+    return new_train,new_test
 
 
 # 调整参数
@@ -114,54 +127,6 @@ def plot_fea_importance(classifier,X_train):
     plt.show()
 
 
-# cv5 交叉验证
-def evaluate_cv5_lgb1(train_df, test_df, cols, test=False):
-    kf = KFold(n_splits=5, shuffle=True, random_state=42)
-    y_test = 0
-    oof_train = np.zeros((train_df.shape[0],))
-    for i, (train_index, val_index) in enumerate(kf.split(train_df[cols])):
-        X_train, y_train = train_df.loc[train_index, cols], train_df.y.values[train_index]
-        X_val, y_val = train_df.loc[val_index, cols], train_df.y.values[val_index]
-
-        lgb_train = lgb.Dataset(
-            X_train, y_train)
-        lgb_eval = lgb.Dataset(
-            X_val, y_val,
-            reference=lgb_train)
-        print('开始训练......')
-
-        params = {
-            'task': 'train',
-            'boosting_type': 'gbdt',
-            'objective': 'binary',
-            'metric': {'auc', 'binary_logloss'},
-            'learning_rate': 0.025,
-            'num_leaves': 38,
-            'min_data_in_leaf': 170,
-            'bagging_fraction': 0.85,
-            'bagging_freq': 1,
-            'seed': 42
-        }
-
-        gbm = lgb.train(params,
-                        lgb_train,
-                        num_boost_round=40000,
-                        valid_sets=lgb_eval,
-                        early_stopping_rounds=50,
-                        verbose_eval=False,
-                        )
-        y_pred = gbm.predict(X_val)
-        if test:
-            result=gbm.predict(test_df.loc[:, cols])
-            print(type(result),result.shape)
-            y_test+= gbm.predict(test_df.loc[:, cols])
-        oof_train[val_index] = y_pred
-    auc = roc_auc_score(train_df.y.values, oof_train)
-    y_test/= 5
-    print('5-Fold auc:', auc)
-    return y_test
-
-
 def evaluate_cv5_lgb(train_df, test_df, cols, test=False):
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
     # xgb = XGBClassifier()
@@ -178,11 +143,20 @@ def evaluate_cv5_lgb(train_df, test_df, cols, test=False):
     for i, (train_index, val_index) in enumerate(kf.split(train_df[cols])):
         X_train, y_train = train_df.loc[train_index, cols], train_df.y.values[train_index]
         X_val, y_val = train_df.loc[val_index, cols], train_df.y.values[val_index]
-        xgb = XGBClassifier(learning_rate=0.12, max_depth=6, min_child_weight=3,
-                            subsample=0.98, colsample_bytree=0.6)
+        xgb = XGBClassifier(n_estimators=4000,
+                            learning_rate=0.03,
+                            num_leaves=30,
+                            colsample_bytree=.8,
+                            subsample=.9,
+                            max_depth=7,
+                            reg_alpha=.1,
+                            reg_lambda=.1,
+                            min_split_gain=.01,
+                            min_child_weight=2,
+                            verbose=True)
         xgb.fit(X_train, y_train,
                 eval_set=[(X_train, y_train), (X_val, y_val)],
-                early_stopping_rounds=50, eval_metric=['auc'], verbose=True)
+                early_stopping_rounds=100, eval_metric=['auc'], verbose=True)
         y_pred = xgb.predict_proba(X_val)[:,1]
         if test:
             y_test += xgb.predict_proba(test_df.loc[:, cols])[:,1]
