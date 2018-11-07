@@ -21,9 +21,12 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.model_selection import GridSearchCV
 import lightgbm as lgb
+
 pd.set_option('display.max_columns',100)
 df_train=pd.read_csv('input/train.csv')
 df_test=pd.read_csv('input/test.csv')
+train_len = len(df_train)
+df = pd.concat([df_train, df_test], axis=0, ignore_index=True, sort=False)
 
 
 def add_poly_features(data,column_names):
@@ -38,43 +41,56 @@ def add_poly_features(data,column_names):
     return rest_features
 
 
-def process_label(train,test,cate_cols):
+def process_label(df,cate_cols):
     # 数据预处理 类别编码
     cate_cols=['job','marital','education','default','housing','loan','contact','day','month','poutcome']
     for col in cate_cols:
         lb_encoder=LabelEncoder()
-        train[col]=lb_encoder.fit_transform(train[col])
-        test[col]=lb_encoder.transform(test[col]) # 这个步骤风险有点大，因为test的类别标签不一定都出现在train里面，这里比较幸运
+        df[col]=lb_encoder.fit_transform(df[col])
 
-    train = add_poly_features(train, cate_cols)
-    test = add_poly_features(test, cate_cols)
+    df = add_poly_features(df, cate_cols)
+    df = pd.get_dummies(df, columns=cate_cols)
 
-    train = pd.get_dummies(train, columns=cate_cols)
-    test = pd.get_dummies(test, columns=cate_cols)
-    return train,test
+    return df
 
 
-def process_nums(train,test,num_cols):
+def process_nums(df,num_cols):
     # 数据预处理 数值型数据
     num_cols=['age','balance','duration','campaign','pdays','previous']
     scaler=MinMaxScaler()
-    train[num_cols] = scaler.fit_transform(train[num_cols].values)
-    test[num_cols] = scaler.transform(test[num_cols].values)
+    df[num_cols] = scaler.fit_transform(df[num_cols].values)
 
-    return train,test
+    # 定义函数
+    def standardize_nan(x):
+        # 标准化
+        x_mean = np.nanmean(x)
+        x_std = np.nanstd(x)
+        return (x - x_mean) / x_std
+
+    df['age_log'] = np.log(df.age)
+    df['age_log_std'] = standardize_nan(df['age_log'])
+
+    df['balance_p_nan'] = df['balance'].where(df.balance > 0, np.nan)
+    df['balance_m_nan'] = df['balance'].where(df.balance < 0, np.nan)
+    df['balance_p_log_nan'] = np.log(df['balance_p_nan'])
+    df['balance_m_log_nan'] = np.log(-df['balance_m_nan'])
+    df['balance_p_log_std_nan'] = standardize_nan(df['balance_p_log_nan'])
+    df['balance_m_log_std_nan'] = standardize_nan(df['balance_m_log_nan'])
+    df['balance_sign'] = np.sign(df['balance'])
+    return df
 
 
-def create_feature(train,test):
+def create_feature(df):
     # 数据预处理 类别编码
     cate_cols = ['job', 'marital', 'education', 'default', 'housing', 'loan', 'contact', 'day', 'month', 'poutcome']
-    train, test=process_label(train,test,cate_cols)
+    df=process_label(df,cate_cols)
     # 数据预处理 数值型数据
     num_cols = ['age', 'balance', 'duration', 'campaign', 'pdays', 'previous']
-    train, test=process_nums(train,test,num_cols)
+    df=process_nums(df,num_cols)
 
-    print(train.shape)
-    print(test.shape)
+    train,test=df[:train_len],df[train_len:]
     return train,test
+
 
 # 调整参数
 def tune_params(model,params,X,y):
@@ -86,7 +102,7 @@ def tune_params(model,params,X,y):
 
 # 特征重要性
 def plot_fea_importance(classifier,X_train):
-    fig=plt.figure(figsize=(10,12))
+    plt.figure(figsize=(10,12))
     name = "xgb"
     indices = np.argsort(classifier.feature_importances_)[::-1][:40]
     g = sns.barplot(y=X_train.columns[indices][:40],
@@ -96,6 +112,8 @@ def plot_fea_importance(classifier,X_train):
     g.tick_params(labelsize=9)
     g.set_title(name + " feature importance")
     plt.show()
+
+
 # cv5 交叉验证
 def evaluate_cv5_lgb1(train_df, test_df, cols, test=False):
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
@@ -160,10 +178,11 @@ def evaluate_cv5_lgb(train_df, test_df, cols, test=False):
     for i, (train_index, val_index) in enumerate(kf.split(train_df[cols])):
         X_train, y_train = train_df.loc[train_index, cols], train_df.y.values[train_index]
         X_val, y_val = train_df.loc[val_index, cols], train_df.y.values[val_index]
-        xgb = XGBClassifier()
+        xgb = XGBClassifier(learning_rate=0.12, max_depth=6, min_child_weight=3,
+                            subsample=0.98, colsample_bytree=0.6)
         xgb.fit(X_train, y_train,
-                  eval_set=[(X_train, y_train), (X_val, y_val)],
-                  early_stopping_rounds=50, eval_metric=['auc'], verbose=2)
+                eval_set=[(X_train, y_train), (X_val, y_val)],
+                early_stopping_rounds=50, eval_metric=['auc'], verbose=True)
         y_pred = xgb.predict_proba(X_val)[:,1]
         if test:
             y_test += xgb.predict_proba(test_df.loc[:, cols])[:,1]
@@ -171,14 +190,12 @@ def evaluate_cv5_lgb(train_df, test_df, cols, test=False):
         if i==0:
             plot_fea_importance(xgb,X_train)
     auc = roc_auc_score(train_df.y.values, oof_train)
-    print(y_test)
     y_test /= 5
-    print(y_test)
     print('5 Fold auc:', auc)
     return y_test
 
 
-train,test=create_feature(df_train,df_test)
+train,test=create_feature(df)
 # print(list(train.columns))
 cols = [col for col in train.columns if col not in ['id','y']]
 # y_test=evaluate_cv5_lgb1(train,test,cols,True)
