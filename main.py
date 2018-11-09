@@ -7,6 +7,7 @@
 @Software: PyCharm 
 @Description:
 """
+import gc # 垃圾回收
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,8 +22,10 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.model_selection import GridSearchCV
 import lightgbm as lgb
-
 pd.set_option('display.max_columns',100)
+gc.enable()
+
+
 df_train=pd.read_csv('input/train.csv')
 df_test=pd.read_csv('input/test.csv')
 train_len = len(df_train)
@@ -41,70 +44,50 @@ def add_poly_features(data,column_names):
     return rest_features
 
 
-def process_label(df,cate_cols):
-    # 数据预处理 类别编码
-    cate_cols=['job','marital','education','default','housing','loan','contact','poutcome']
-    # for col in cate_cols:
-    #     lb_encoder=LabelEncoder()
-    #     df[col]=lb_encoder.fit_transform(df[col])
-    # df = add_poly_features(df, cate_cols)
-    df = pd.get_dummies(df, columns=cate_cols)
-    return df
+def create_feature(df):
 
-
-def process_nums(df,num_cols):
-    # 数据预处理 数值型数据
-    # num_cols=['age','balance','duration','campaign','pdays','previous']
-    # scaler=MinMaxScaler()
-    # df[num_cols] = scaler.fit_transform(df[num_cols].values)
-
-    # 定义函数
+    # ----------- Start数据预处理 数值型数据--------
+    # num_cols = ['age', 'balance', 'duration', 'campaign', 'pdays', 'previous']
     def standardize_nan(x):
         # 标准化
-        x_mean = np.nanmean(x)
+        x_mean = np.nanmean(x) # 求平均值，但是个数不包括nan
         x_std = np.nanstd(x)
         return (x - x_mean) / x_std
 
-    df["log_balance"] = np.log(df.balance - df.balance.min() + 1)
-    df["log_duration"] = np.log(df.duration + 1)
-    df["log_campaign"] = np.log(df.campaign + 1)
-    df["log_pdays"] = np.log(df.pdays - df.pdays.min() + 1)
-    df = df.drop(["balance", "duration", "campaign", "pdays"], axis=1)
+    df['log_age'] = np.log(df['age'])
+    df['log_std_age'] = standardize_nan(df['age_log'])
+    df["log_balance"] = np.log(df['balance'] - df['balance'] .min() + 1)
+    df["log_duration"] = np.log(df['duration']+ 1)
+    df["log_campaign"] = np.log(df['campaign'] + 1)
+    df["log_pdays"] = np.log(df['pdays']- df['pdays'].min() + 1)
+    df['log_previous'] = np.log(df['previous'])
+    df = df.drop(["age","balance", "duration", "campaign", "pdays","previous"], axis=1)
 
     # month 文字列与数値的変換
-    month_dict = {"jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
-                  "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12}
-    df["month_int"] = df["month"].map(month_dict)
-    # month 与day 对 datetime 的変換
-    data_datetime = df \
-        .assign(ymd_str=lambda x: "2014" + "-" + x["month_int"].astype(str) + "-" + x["day"].astype(str)) \
-        .assign(datetime=lambda x: pd.to_datetime(x["ymd_str"])) \
-        ["datetime"].values
-    # datetime  int 变换
-    index = pd.DatetimeIndex(data_datetime)
-    df["datetime_int"] = np.log(index.astype(np.int64))
+    df['month'] = df['month'].map({'jan': 1,
+                                   'feb': 2,
+                                   'mar': 3,
+                                   'apr': 4,
+                                   'may': 5,
+                                   'jun': 6,
+                                   'jul': 7,
+                                   'aug': 8,
+                                   'sep': 9,
+                                   'oct': 10,
+                                   'nov': 11,
+                                   'dec': 12
+                                   }).astype(int)
+    # 1月:0、2月:31、3月:(31+28)、4月:(31+28+31)、 ...
+    day_sum = pd.Series(np.cumsum([0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30]), index=np.arange(1, 13))
+    df['date'] = (df['month'].map(day_sum) + df['day']).astype(int)
+    # ------------End 数据预处理 类别编码-------------
 
-    # 删除不要的列
-    df = df.drop(["month", "day", "month_int"], axis=1)
-    del data_datetime
-    del index
-    return df
-
-
-def create_feature(df):
-    # 数据预处理 类别编码
-    cate_cols = ['job', 'marital', 'education', 'default', 'housing', 'loan', 'contact', 'day', 'month', 'poutcome']
-    new_df=process_label(df,cate_cols)
-
-    # 数据预处理 数值型数据
-    num_cols = ['age', 'balance', 'duration', 'campaign', 'pdays', 'previous']
-    new_df=process_nums(new_df,num_cols)
-
-    # 添加些交叉特征
-    # poly_cols=['log_balance','log_duration','log_campaign','log_pdays','datetime_int','age','previous']
-    # new_df=add_poly_features(new_df,poly_cols)
-
-    new_train,new_test=new_df[:train_len],new_df[train_len:]
+    # ---------- Start 数据预处理 类别型数据------------
+    # cate_cols = ['job', 'marital', 'education', 'default', 'housing', 'loan', 'contact', 'day', 'month', 'poutcome']
+    cate_cols = ['job', 'marital', 'education', 'default', 'housing', 'loan', 'contact', 'month', 'poutcome'] # day不用类别编码
+    df = pd.get_dummies(df, columns=cate_cols)
+    # ------------End 数据预处理 类别编码----------
+    new_train,new_test=df[:train_len],df[train_len:]
     print(list(new_train.columns))
     print(new_train.shape)
     return new_train,new_test
@@ -161,13 +144,14 @@ def evaluate_cv5_lgb(train_df, test_df, cols, test=False):
                             verbose=True)
         xgb.fit(X_train, y_train,
                 eval_set=[(X_train, y_train), (X_val, y_val)],
-                early_stopping_rounds=100, eval_metric=['auc'], verbose=True)
+                early_stopping_rounds=100, eval_metric=['auc'], verbose=False)
         y_pred = xgb.predict_proba(X_val)[:,1]
         if test:
             y_test += xgb.predict_proba(test_df.loc[:, cols])[:,1]
         oof_train[val_index] = y_pred
         if i==0:
             plot_fea_importance(xgb,X_train)
+    gc.collect()
     auc = roc_auc_score(train_df.y.values, oof_train)
     y_test /= 5
     print('5 Fold auc:', auc)
@@ -175,9 +159,7 @@ def evaluate_cv5_lgb(train_df, test_df, cols, test=False):
 
 
 train,test=create_feature(df)
-# print(list(train.columns))
 cols = [col for col in train.columns if col not in ['id','y']]
-# y_test=evaluate_cv5_lgb1(train,test,cols,True)
 y_test=evaluate_cv5_lgb(train,test,cols,True)
 
 test['y']=y_test
