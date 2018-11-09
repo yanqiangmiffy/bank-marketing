@@ -9,8 +9,7 @@ reg_alpha=.1,
 reg_lambda=.1,
 min_split_gain=.01,
 min_child_weight=2,
-silent=-1,
-verbose=-1,
+verbose=True,
 
 # 0.929
 learning_rate=0.12,
