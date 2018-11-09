@@ -158,30 +158,29 @@ def evaluate_cv5(train_df, test_df, cols,model):
 
 def create_xgb():
     xgb = XGBClassifier(n_estimators=4000,
-                        learning_rate=0.03,
-                        num_leaves=30,
-                        colsample_bytree=.8,
-                        subsample=.9,
-                        max_depth=7,
-                        reg_alpha=.1,
-                        reg_lambda=.1,
-                        min_split_gain=.01,
-                        min_child_weight=2,
-                        verbose=True)
+                        learning_rate=0.12,
+                        max_depth=6,
+                        min_child_weight=3,
+                        ubsample=0.98,
+                        colsample_bytree=0.6)
     return xgb
 
 
 def create_lgb():
-    lgb = LGBMClassifier()
+    lgb = LGBMClassifier(ln_estimators=4000,
+                        learning_rate=0.12,
+                        max_depth=6,
+                        min_child_weight=3,
+                        ubsample=0.98,
+                        colsample_bytree=0.6)
     return lgb
 
 
 def create_grab():
     grab = GradientBoostingClassifier(n_estimators=4000,
-                         learning_rate=0.03,
-                         subsample=.9,
-                         max_depth=7,
-                         verbose=True)
+                                      learning_rate=0.03,
+                                      subsample=.9,
+                                      max_depth=7)
     return grab
 
 
