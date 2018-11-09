@@ -143,9 +143,7 @@ def evaluate_cv5(train_df, test_df, cols,model):
     for i, (train_index, val_index) in enumerate(kf.split(train_df[cols])):
         X_train, y_train = train_df.loc[train_index, cols], train_df.y.values[train_index]
         X_val, y_val = train_df.loc[val_index, cols], train_df.y.values[val_index]
-        model.fit(X_train, y_train,
-                eval_set=[(X_train, y_train), (X_val, y_val)],
-                early_stopping_rounds=100, eval_metric=['auc'], verbose=1)
+        model.fit(X_train, y_train)
         y_pred = model.predict_proba(X_val)[:,1] # 验证集
         y_test += model.predict_proba(test_df.loc[:, cols])[:,1] # 测试集
         oof_train[val_index] = y_pred
@@ -174,17 +172,7 @@ def create_xgb():
 
 
 def create_lgb():
-    lgb = LGBMClassifier(n_estimators=4000,
-                        learning_rate=0.03,
-                        num_leaves=30,
-                        colsample_bytree=.8,
-                        subsample=.9,
-                        max_depth=7,
-                        reg_alpha=.1,
-                        reg_lambda=.1,
-                        min_split_gain=.01,
-                        min_child_weight=2,
-                        verbose=True)
+    lgb = LGBMClassifier()
     return lgb
 
 

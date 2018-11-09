@@ -60,7 +60,7 @@ def create_feature(df):
     df["log_duration"] = np.log(df['duration']+ 1)
     df["log_campaign"] = np.log(df['campaign'] + 1)
     df["log_pdays"] = np.log(df['pdays']- df['pdays'].min() + 1)
-    df['log_previous'] = np.log(df['previous']) # 这里没有+1
+    df['log_previous'] = np.log(df['previous']+1) # 这里没有+1
 
     # df['log_std_age'] = standardize_nan(df['log_age'])
     # df['log_std_balance'] = standardize_nan(df['log_balance'])
