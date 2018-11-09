@@ -55,13 +55,21 @@ def create_feature(df):
         return (x - x_mean) / x_std
 
     df['log_age'] = np.log(df['age'])
-    df['log_std_age'] = standardize_nan(df['age_log'])
+    df['log_std_age'] = standardize_nan(df['log_age'])
     df["log_balance"] = np.log(df['balance'] - df['balance'] .min() + 1)
     df["log_duration"] = np.log(df['duration']+ 1)
     df["log_campaign"] = np.log(df['campaign'] + 1)
     df["log_pdays"] = np.log(df['pdays']- df['pdays'].min() + 1)
-    df['log_previous'] = np.log(df['previous'])
-    df = df.drop(["age","balance", "duration", "campaign", "pdays","previous"], axis=1)
+    df['log_previous'] = np.log(df['previous']) # 这里没有+1
+
+    # df['log_std_age'] = standardize_nan(df['log_age'])
+    # df['log_std_balance'] = standardize_nan(df['log_balance'])
+    # df['log_std_duration'] = standardize_nan(df['log_duration'])
+    # df['log_std_campaign'] = standardize_nan(df['log_campaign'])
+    # df['log_std_pdays'] = standardize_nan(df['log_pdays'])
+    # df['log_std_previous'] = standardize_nan(df['log_previous'])
+
+    df = df.drop(["age","balance", "duration", "campaign", "pdays"], axis=1)
 
     # month 文字列与数値的変換
     df['month'] = df['month'].map({'jan': 1,
@@ -84,9 +92,12 @@ def create_feature(df):
 
     # ---------- Start 数据预处理 类别型数据------------
     # cate_cols = ['job', 'marital', 'education', 'default', 'housing', 'loan', 'contact', 'day', 'month', 'poutcome']
-    cate_cols = ['job', 'marital', 'education', 'default', 'housing', 'loan', 'contact', 'month', 'poutcome'] # day不用类别编码
+    cate_cols = ['job', 'marital', 'education', 'default', 'housing', 'loan', 'contact', 'month', 'poutcome']
     df = pd.get_dummies(df, columns=cate_cols)
     # ------------End 数据预处理 类别编码----------
+    with open('input/0.94224.txt','w',encoding='utf-8') as f:
+        f.write(str(list(df.columns)))
+    # df.to_csv('input/0.94224.csv',index=None)
     new_train,new_test=df[:train_len],df[train_len:]
     print(list(new_train.columns))
     print(new_train.shape)
