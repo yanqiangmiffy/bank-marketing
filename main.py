@@ -29,7 +29,7 @@ gc.enable()
 df_train=pd.read_csv('input/train.csv')
 df_test=pd.read_csv('input/test.csv')
 train_len = len(df_train)
-df = pd.concat([df_train, df_test], axis=0, ignore_index=True, sort=False)
+df = pd.concat([df_train, df_test], axis=0, ignore_index=True)
 
 
 def add_poly_features(data,column_names):
@@ -99,7 +99,7 @@ def create_feature(df):
         f.write(str(list(df.columns)))
     # df.to_csv('input/0.94224.csv',index=None)
     new_train,new_test=df[:train_len],df[train_len:]
-    print(list(new_train.columns))
+    # print(list(new_train.columns))
     print(new_train.shape)
     return new_train,new_test
 
@@ -169,9 +169,9 @@ def evaluate_cv5_lgb(train_df, test_df, cols, test=False):
     return y_test
 
 
-train,test=create_feature(df)
-cols = [col for col in train.columns if col not in ['id','y']]
-y_test=evaluate_cv5_lgb(train,test,cols,True)
-
-test['y']=y_test
-test[['id','y']].to_csv('result/01_lgb_cv5.csv',columns=None, header=False, index=False)
+# train,test=create_feature(df)
+# cols = [col for col in train.columns if col not in ['id','y']]
+# y_test=evaluate_cv5_lgb(train,test,cols,True)
+#
+# test['y']=y_test
+# test[['id','y']].to_csv('result/01_lgb_cv5.csv',columns=None, header=False, index=False)
